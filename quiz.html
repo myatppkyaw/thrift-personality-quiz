@@ -68,20 +68,29 @@
       display: none;
       width: 100%;
       height: 100%;
+      opacity: 0;
+      transform: translateY(5px);
+      will-change: opacity, transform;
     }
 
     .screen.active {
       display: grid;
-      animation: quickFade 180ms ease-out both;
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity 240ms ease, transform 240ms ease;
     }
 
-    @keyframes quickFade {
-      from {
-        opacity: 0;
-      }
+    .screen.active.leaving {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-4px);
+    }
 
-      to {
-        opacity: 1;
+    @media (prefers-reduced-motion: reduce) {
+      .screen,
+      .screen.active {
+        transition: none;
+        transform: none;
       }
     }
 
@@ -634,17 +643,46 @@
     const app = document.querySelector("#app");
     let currentQuestion = 0;
     let answers = [null, null, null];
+    let isTransitioning = false;
 
     function noWidow(text) {
       return text.replace(/\s+(\S+)$/, "&nbsp;$1");
     }
 
-    function renderQuestion(index) {
+    function setScreen(html, bindEvents, instant = false) {
+      const current = app.querySelector(".screen.active");
+
+      if (!current || instant) {
+        app.innerHTML = html;
+        const next = app.querySelector(".screen");
+        next.classList.add("active");
+        bindEvents();
+        return;
+      }
+
+      if (isTransitioning) return;
+      isTransitioning = true;
+      current.classList.add("leaving");
+
+      window.setTimeout(() => {
+        app.innerHTML = html;
+        const next = app.querySelector(".screen");
+        window.requestAnimationFrame(() => {
+          next.classList.add("active");
+          bindEvents();
+          window.setTimeout(() => {
+            isTransitioning = false;
+          }, 240);
+        });
+      }, 130);
+    }
+
+    function renderQuestion(index, instant = false) {
       currentQuestion = index;
       const question = QUESTIONS[index];
       const selected = answers[index];
-      app.innerHTML = `
-        <div class="screen question-screen active">
+      const html = `
+        <div class="screen question-screen">
           <p class="progress">${question.progress}</p>
           <h1 class="question-heading">${question.heading}</h1>
           <h2 class="question-text">${noWidow(question.text)}</h2>
@@ -667,26 +705,37 @@
         </div>
       `;
 
-      app.querySelectorAll(".answer").forEach((button) => {
-        button.addEventListener("click", () => {
-          answers[index] = button.dataset.type;
-          renderQuestion(index);
+      setScreen(html, () => {
+        app.querySelectorAll(".answer").forEach((button) => {
+          button.addEventListener("click", () => {
+            if (isTransitioning) return;
+            answers[index] = button.dataset.type;
+            app.querySelectorAll(".answer").forEach((answerButton) => {
+              const isSelected = answerButton.dataset.type === answers[index];
+              answerButton.classList.toggle("selected", isSelected);
+              answerButton.setAttribute("aria-checked", String(isSelected));
+            });
+            app.querySelector(".next-btn").disabled = false;
+          });
         });
-      });
 
-      app.querySelector(".next-btn").addEventListener("click", () => {
-        if (!answers[index]) return;
-        if (index < QUESTIONS.length - 1) {
-          renderQuestion(index + 1);
-        } else {
-          renderResult(calculateResult());
+        app.querySelector(".next-btn").addEventListener("click", () => {
+          if (isTransitioning || !answers[index]) return;
+          if (index < QUESTIONS.length - 1) {
+            renderQuestion(index + 1);
+          } else {
+            renderResult(calculateResult());
+          }
+        });
+
+        const backButton = app.querySelector(".back-btn");
+        if (backButton) {
+          backButton.addEventListener("click", () => {
+            if (isTransitioning) return;
+            renderQuestion(index - 1);
+          });
         }
-      });
-
-      const backButton = app.querySelector(".back-btn");
-      if (backButton) {
-        backButton.addEventListener("click", () => renderQuestion(index - 1));
-      }
+      }, instant);
     }
 
     function calculateResult() {
@@ -708,8 +757,8 @@
 
     function renderResult(type) {
       const result = TYPES[type];
-      app.innerHTML = `
-        <div class="screen result-screen active">
+      const html = `
+        <div class="screen result-screen">
           <div class="character-wrap">
             <img class="character" src="${result.image}" alt="${result.alt}">
           </div>
@@ -723,12 +772,17 @@
         </div>
       `;
 
-      app.querySelector(".reflection-btn").addEventListener("click", renderReflection);
+      setScreen(html, () => {
+        app.querySelector(".reflection-btn").addEventListener("click", () => {
+          if (isTransitioning) return;
+          renderReflection();
+        });
+      });
     }
 
     function renderReflection() {
-      app.innerHTML = `
-        <div class="screen reflection-screen active">
+      const html = `
+        <div class="screen reflection-screen">
           <div class="reflection-content">
             <h1 class="reflection-title">EVERY OBJECT HAS A STORY</h1>
             <p class="reflection-text">${noWidow("The next time you see something secondhand, pause before judging. What story might it hold? What beauty might you be missing?")}</p>
@@ -738,12 +792,15 @@
         </div>
       `;
 
-      app.querySelector(".start-again").addEventListener("click", () => {
-        window.location.href = "https://hattapivot.my.canva.site/digital-thrift-market/";
+      setScreen(html, () => {
+        app.querySelector(".start-again").addEventListener("click", () => {
+          if (isTransitioning) return;
+          window.location.href = "https://hattapivot.my.canva.site/digital-thrift-market/";
+        });
       });
     }
 
-    renderQuestion(0);
+    renderQuestion(0, true);
   </script>
 </body>
 </html>
