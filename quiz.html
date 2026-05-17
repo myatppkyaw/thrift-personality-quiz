@@ -72,6 +72,17 @@
 
     .screen.active {
       display: grid;
+      animation: quickFade 180ms ease-out both;
+    }
+
+    @keyframes quickFade {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
     }
 
     .question-screen {
